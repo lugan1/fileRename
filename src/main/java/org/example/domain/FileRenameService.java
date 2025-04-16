@@ -15,8 +15,9 @@ public interface FileRenameService {
     void renameFiles(List<File> files, String newPattern, int startNumber, RenamingCallback callback);
 
     interface RenamingCallback {
-        void onFileRenamed(File oldFile, File newFile);
+        void onRenamed(File oldFile, File newFile);
+        void onExists(File newFile);
+        void onComplete(int count);
         void onError(File file, Exception e);
-        void onLog(String message);
     }
 }

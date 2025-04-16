@@ -16,47 +16,14 @@ public class FileRenameViewModel {
         this.renameService = renameService;
     }
 
-    public void setListener(StateListener listener) {
-        this.listener = listener;
+    private void notifyStateChanged(ResultType type) {
+        if (listener != null) {
+            listener.onStateChanged(type, state);
+        }
     }
 
     public void processIntent(FileRenameIntent intent) {
         switch (intent.getIntentType()) {
-            case ADD: {
-                AddFilesIntent addIntent = (AddFilesIntent) intent;
-                for (File file : addIntent.files()) {
-                    state.addFile(file);
-                    state.addLog("파일 추가됨: " + file.getAbsolutePath());
-                }
-                notifyStateChanged();
-                break;
-            }
-            case RENAME: {
-                RenameFilesIntent renameIntent = (RenameFilesIntent) intent;
-                List<File> files = state.getFileList();
-                renameService.renameFiles(files, renameIntent.newPattern(), renameIntent.startNumber(), new FileRenameService.RenamingCallback() {
-                    @Override
-                    public void onFileRenamed(File oldFile, File newFile) {
-                        int index = files.indexOf(oldFile);
-                        if (index != -1) {
-                            state.setFileAt(index, newFile);
-                        }
-                        state.addLog("변경됨: " + oldFile.getAbsolutePath() + " -> " + newFile.getAbsolutePath());
-                        notifyStateChanged();
-                    }
-                    @Override
-                    public void onError(File file, Exception e) {
-                        state.addLog("에러 발생: " + file.getAbsolutePath() + " - " + e.getMessage());
-                        notifyStateChanged();
-                    }
-                    @Override
-                    public void onLog(String message) {
-                        state.addLog(message);
-                        notifyStateChanged();
-                    }
-                });
-                break;
-            }
             case PATTERN_CHANGED: {
                 PatternChangedIntent patternIntent = (PatternChangedIntent) intent;
                 String newPattern = patternIntent.newPattern();
@@ -74,18 +41,68 @@ public class FileRenameViewModel {
                 }
                 break;
             }
+
+            case ADD: {
+                AddFilesIntent addIntent = (AddFilesIntent) intent;
+                for (File file : addIntent.files()) {
+                    state.addFile(file);
+                    state.addLog("파일 추가됨: " + file.getAbsolutePath());
+                }
+                notifyStateChanged(ResultType.LIST_RELOAD);
+                notifyStateChanged(ResultType.LOG_MESSAGE);
+                break;
+            }
+
+            case RENAME: {
+                RenameFilesIntent renameIntent = (RenameFilesIntent) intent;
+                List<File> files = state.getFileList();
+                renameService.renameFiles(files, renameIntent.newPattern(), renameIntent.startNumber(), new FileRenameService.RenamingCallback() {
+                    @Override
+                    public void onRenamed(File oldFile, File newFile) {
+                        int index = files.indexOf(oldFile);
+                        if (index != -1) {
+                            state.setFileAt(index, newFile);
+                        }
+                        notifyStateChanged(ResultType.LIST_RELOAD);
+                        state.addLog("변경됨: " + oldFile.getAbsolutePath() + " -> " + newFile.getAbsolutePath());
+                    }
+
+                    @Override
+                    public void onExists(File newFile) {
+                        state.addLog("오류: " + newFile.getAbsolutePath() + " 파일이 이미 존재합니다. 건너뜀.");
+                        notifyStateChanged(ResultType.LOG_MESSAGE);
+                    }
+
+                    @Override
+                    public void onComplete(int count) {
+                        state.addLog("총 " + count + "개의 파일명이 변경되었습니다.");
+                        notifyStateChanged(ResultType.LOG_MESSAGE);
+                    }
+
+                    @Override
+                    public void onError(File file, Exception e) {
+                        state.addLog(e.getMessage());
+                        notifyStateChanged(ResultType.LOG_MESSAGE);
+                    }
+                });
+                break;
+            }
             default:
                 break;
         }
     }
 
-    private void notifyStateChanged() {
-        if (listener != null) {
-            listener.onStateChanged(state);
-        }
+    public enum ResultType {
+        LIST_RELOAD,
+        ON_FILE_RENAMED,
+        LOG_MESSAGE
+    }
+
+    public void setListener(StateListener listener) {
+        this.listener = listener;
     }
 
     public interface StateListener {
-        void onStateChanged(FileRenameState state);
+        void onStateChanged(ResultType type, FileRenameState state);
     }
 }

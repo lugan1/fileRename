@@ -142,25 +142,31 @@ public class FileRenameView extends JFrame implements FileRenameViewModel.StateL
      * @param state 최신 FileRenameState 객체
      */
     @Override
-    public void onStateChanged(FileRenameState state) {
-        // 파일 목록 비교 후 다를 경우만 갱신
-        List<File> newFileList = state.getFileList();
-        if (!fileListModelEquals(newFileList)) {
-            fileListModel.clear();
-            for (File file : newFileList) {
-                fileListModel.addElement(file);
+    public void onStateChanged(FileRenameViewModel.ResultType type, FileRenameState state) {
+        switch (type) {
+            case LIST_RELOAD -> {
+                // 파일 목록 비교 후 다를 경우만 갱신
+                List<File> newFileList = state.getFileList();
+                if (!fileListEquals(newFileList)) {
+                    fileListModel.clear();
+                    for (File file : newFileList) {
+                        fileListModel.addElement(file);
+                    }
+                }
             }
-        }
 
-        // 로그 텍스트 비교 후 다를 경우만 갱신
-        List<String> newLogs = state.getLogMessages();
-        String newLogText = String.join("\n", newLogs) + "\n";
-        if (!logTextArea.getText().equals(newLogText)) {
-            logTextArea.setText(newLogText);
+            case LOG_MESSAGE -> {
+                // 로그 텍스트 비교 후 다를 경우만 갱신
+                List<String> newLogs = state.getLogMessages();
+                String newLogText = String.join("\n", newLogs) + "\n";
+                if (!logTextArea.getText().equals(newLogText)) {
+                    logTextArea.setText(newLogText);
+                }
+            }
         }
     }
 
-    private boolean fileListModelEquals(List<File> newFiles) {
+    private boolean fileListEquals(List<File> newFiles) {
         if (fileListModel.size() != newFiles.size()) return false;
         for (int i = 0; i < fileListModel.size(); i++) {
             File existing = fileListModel.get(i);
@@ -175,7 +181,6 @@ public class FileRenameView extends JFrame implements FileRenameViewModel.StateL
             final String text = newNamePatternField.getText().trim();
             @Override
             public void insertUpdate(DocumentEvent e) {
-
                 // 이전 값과 다를 경우에만 처리하도록 할 수도 있음
                 viewModel.processIntent(new PatternChangedIntent(text));
             }
@@ -188,9 +193,7 @@ public class FileRenameView extends JFrame implements FileRenameViewModel.StateL
             @Override
             public void changedUpdate(DocumentEvent e) {
                 // 설명: 속성(attribute) 이 바뀌었을 때 호출됩니다. 즉, 내용(text) 은 바뀌지 않지만, 서식, 스타일 등이 바뀔 때 사용됩니다.
-                //
                 //예시 상황:
-                //
                 //JTextPane에서 글자에 bold, italic, color 등 속성 변경
             }
         });

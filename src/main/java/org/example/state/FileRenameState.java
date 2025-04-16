@@ -5,22 +5,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FileRenameState {
-
-
     // 파일 목록과 로그 메시지는 내부에서 변경 가능한 리스트로 관리하지만, 외부에는 불변 리스트로 노출
-    private final List<File> fileList;
-    private final List<String> logMessages;
+    // ViewModel 에서 FileList를 관리하기 위해 사용. ViewModel 은 UI 프레임워크를 몰라야하며 종속되면 안된다.
+    private final List<File> fileList = new ArrayList<>();
+    private final List<String> logMessages = new ArrayList<>();
 
     // 입력 관련 상태: 새 파일명 패턴과 시작 번호
-    private String currentPattern;
-    private int currentStartNumber;
+    private String currentPattern = "";
+    private int currentStartNumber = 1;
 
-    public FileRenameState() {
-        this.fileList = new ArrayList<>();
-        this.logMessages = new ArrayList<>();
-        this.currentPattern = "";
-        this.currentStartNumber = 1;
-    }
 
     // 입력 상태 관련 getter / setter
     public String getCurrentPattern() {

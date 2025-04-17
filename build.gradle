@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'org.example'
-version = '1.0-SNAPSHOT'
+version = project.findProperty("version") ?: "1.0.0"
 
 repositories {
     mavenCentral()
@@ -21,4 +21,82 @@ test {
 }
 kotlin {
     jvmToolchain(19)
+}
+
+
+// 🔧 .exe 생성 task
+tasks.register('packageExe', Exec) {
+    group = 'distribution'
+    description = 'jpackage로 .exe 빌드'
+
+    def jarName = "fileRename-${project.version}.jar"
+
+    commandLine 'jpackage',
+            '--type', 'app-image',
+            '--input', 'build/libs',
+            '--name', 'MyApp',
+            '--main-jar', jarName,
+            '--main-class', 'org.example.Main',
+            '--dest', 'build/exe'
+}
+
+
+// 📦 .zip 자동 압축 task
+
+tasks.register('packageZipExe', Zip) {
+    group = 'distribution'
+    description = '압축된 exe 배포파일(.zip)을 생성합니다.'
+
+    dependsOn 'packageExe' // .exe 먼저 생성
+
+    def exeAppName = 'MyApp'
+    def sourceDir = file("build/exe/${exeAppName}")
+    def outputDir = file("build/zip")
+
+    from sourceDir
+    destinationDirectory.set(outputDir)
+    archiveFileName.set("${exeAppName}.zip")
+}
+
+tasks.register('releaseAll') {
+    group = 'distribution'
+    description = '자동으로 버전 증가 + 빌드 + zip 생성 + GitHub release 업로드까지 전부 자동화'
+
+    dependsOn 'build'
+    dependsOn 'packageZipExe'
+
+    doLast {
+        def propsFile = file("gradle.properties")
+        def props = new Properties()
+        props.load(propsFile.newInputStream())
+
+        def oldVersion = props.getProperty("version")
+        def parts = oldVersion.tokenize('.').collect { it.toInteger() }
+        def newVersion = "${parts[0]}.${parts[1]}.${parts[2] + 1}"
+
+        println "📦 버전 증가: ${oldVersion} → ${newVersion}"
+
+        // 버전 업데이트
+        props.setProperty("version", newVersion)
+        props.store(propsFile.newWriter(), null)
+
+        def tag = "v${newVersion}"
+        def zipPath = "build/zip/MyApp.zip"
+        def title = "Release ${newVersion}"
+
+        // GitHub 릴리즈 업로드
+        println "🚀 GitHub Release 업로드..."
+        def ghPath = "C:\\Program Files\\GitHub CLI\\gh.exe"
+        def ghCmd = "\"${ghPath}\" release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
+        def proc = ghCmd.execute()
+        proc.in.eachLine { println "[STDOUT] $it" }
+        proc.err.eachLine { println "[STDERR] $it" }
+        def exitCode = proc.waitFor()
+
+        if (exitCode != 0) {
+            throw new GradleException("❌ GitHub Release 실패: 종료 코드 ${exitCode}")
+        }
+
+        println "✅ 릴리즈 성공: ${tag}"
+    }
 }

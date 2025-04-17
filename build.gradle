@@ -19,18 +19,20 @@ dependencies {
 test {
     useJUnitPlatform()
 }
+
 kotlin {
     jvmToolchain(19)
 }
 
 
-// 🔧 .exe 생성 task
+// ────────────────────────────────────────────────────────────────────────────
+// 1️⃣ .exe 생성 & .zip 패키징 (unchanged)
+// ────────────────────────────────────────────────────────────────────────────
+
 tasks.register('packageExe', Exec) {
     group = 'distribution'
     description = 'jpackage로 .exe 빌드'
-
     def jarName = "fileRename-${project.version}.jar"
-
     commandLine 'jpackage',
             '--type', 'app-image',
             '--input', 'build/libs',
@@ -40,31 +42,23 @@ tasks.register('packageExe', Exec) {
             '--dest', 'build/exe'
 }
 
-
-// 📦 .zip 자동 압축 task
-
 tasks.register('packageZipExe', Zip) {
     group = 'distribution'
     description = '압축된 exe 배포파일(.zip)을 생성합니다.'
-
-    dependsOn 'packageExe' // .exe 먼저 생성
-
-    def exeAppName = 'MyApp'
-    def sourceDir = file("build/exe/${exeAppName}")
-    def outputDir = file("build/zip")
-
-    from sourceDir
-    destinationDirectory.set(outputDir)
-    archiveFileName.set("${exeAppName}.zip")
+    dependsOn 'packageExe'
+    from file("build/exe/MyApp")
+    destinationDirectory.set(file("build/zip"))
+    archiveFileName.set("MyApp.zip")
 }
 
-tasks.register('releaseAll') {
+
+// ────────────────────────────────────────────────────────────────────────────
+// 2️⃣ 버전 증가
+// ────────────────────────────────────────────────────────────────────────────
+
+tasks.register('bumpVersion') {
     group = 'distribution'
-    description = '자동으로 버전 증가 + 빌드 + zip + GitHub Release (OS 대응, 릴리즈 노트 자동 생성)'
-
-    dependsOn 'build'
-    dependsOn 'packageZipExe'
-
+    description = 'gradle.properties의 version 을 patch 레벨로 1 증가시킵니다.'
     doLast {
         def propsFile = file("gradle.properties")
         def props = new Properties()
@@ -77,60 +71,79 @@ tasks.register('releaseAll') {
         println "📦 버전 증가: ${oldVersion} → ${newVersion}"
         props.setProperty("version", newVersion)
         props.store(propsFile.newWriter(), null)
+    }
+}
 
+
+// ────────────────────────────────────────────────────────────────────────────
+// 3️⃣ CHANGELOG 갱신
+// ────────────────────────────────────────────────────────────────────────────
+
+tasks.register('updateChangelog') {
+    group = 'documentation'
+    description = 'CHANGELOG.md 앞에 최신 커밋 로그를 추가합니다.'
+    dependsOn 'bumpVersion'
+    doLast {
+        // bumpVersion 에서 갱신된 gradle.properties 읽어오기
+        def props = new Properties()
+        props.load(file("gradle.properties").newInputStream())
+        def newVersion = props.getProperty("version")
         def tag = "v${newVersion}"
-        def zipPath = "build/zip/MyApp.zip"
-        def title = "Release ${newVersion}"
         def date = new Date().format("yyyy-MM-dd")
 
-        // 🔁 이전 태그 기준 커밋 로그 추출
-        def previousTag = "v${parts[0]}.${parts[1]}.${parts[2]}"
-        def logCmd = ["git", "log", "${previousTag}..HEAD", "--pretty=format:- %s"]
+        // 이전 태그
+        def versionParts = newVersion.tokenize('.').collect { it.toInteger() }
+        def prevTag = "v${versionParts[0]}.${versionParts[1]}.${versionParts[2] - 1}"
+
+        // 커밋 로그
+        def logCmd = ["git", "log", "${prevTag}..HEAD", "--pretty=format:- %s"]
         def commitLog = logCmd.execute().text.trim()
 
-        // 📝 CHANGELOG.md 앞에 추가
+        // CHANGELOG 업데이트
         def changelog = file("CHANGELOG.md")
-        def changelogEntry = """
-            ## ${tag} - ${date}
-            ${commitLog}
-        """ + (changelog.exists() ? changelog.text : "")
-        changelog.text = changelogEntry
+        def header = "## ${tag} - ${date}\n${commitLog}\n\n"
+        changelog.text = header + (changelog.exists() ? changelog.text : "")
         println "📝 CHANGELOG.md 갱신 완료"
-
-        // zip 파일 존재 확인
-        if (!file(zipPath).exists()) {
-            throw new GradleException("❌ zip 파일이 존재하지 않습니다: ${zipPath}")
-        }
-
-        // OS 판별 후 gh 명령 경로 설정
-        def isWindows = System.properties['os.name'].toLowerCase().contains('windows')
-        def ghCmd
-        if (isWindows) {
-            def ghPath = "C:\\Program Files\\GitHub CLI\\gh.exe"
-            ghCmd = "\"${ghPath}\" release create \"${tag}\" \"${zipPath}\" --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
-        } else {
-            // 따옴표로 감싸 glob 문제 방지
-            ghCmd = "gh release create '${tag}' '${zipPath}' --title '${title}' --notes '자동 릴리즈 업로드입니다.'"
-        }
-
-        println "🚀 GitHub Release 업로드..."
-
-        def command = ['sh', '-c', ghCmd] as String[]  // ← 여기 중요!!
-        def processBuilder = new ProcessBuilder(command)
-        processBuilder.directory(project.rootDir)
-
-        // GitHub Actions용 GITHUB_TOKEN 전달
-        processBuilder.environment().put("GITHUB_TOKEN", System.getenv("GITHUB_TOKEN"))
-
-        def proc = processBuilder.start()
-        proc.inputStream.eachLine { println "[STDOUT] $it" }
-        proc.errorStream.eachLine { println "[STDERR] $it" }
-        def exitCode = proc.waitFor()
-
-        if (exitCode != 0) {
-            throw new GradleException("❌ GitHub Release 실패: 종료 코드 ${exitCode}")
-        }
-
-        println "✅ 릴리즈 성공: ${tag}"
     }
+}
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// 4️⃣ GitHub Release 업로드
+// ────────────────────────────────────────────────────────────────────────────
+
+tasks.register('uploadRelease', Exec) {
+    group = 'distribution'
+    description = 'GitHub CLI(gh)를 사용해 Release를 생성/업로드합니다.'
+    dependsOn 'packageZipExe', 'updateChangelog'
+
+    doFirst {
+        // release 관련 변수 재계산
+        def props = new Properties()
+        props.load(file("gradle.properties").newInputStream())
+        ext.newVersion = props.getProperty("version")
+        ext.tag = "v${newVersion}"
+        ext.zipPath = "${project.rootDir}/build/zip/MyApp.zip"
+        ext.title = "Release ${newVersion}"
+    }
+
+    // OS별 gh 커맨드 구성
+    def isWindows = System.properties['os.name'].toLowerCase().contains('windows')
+    def ghCmd = isWindows
+            ? ["C:\\Program Files\\GitHub CLI\\gh.exe", "release", "create", "${tag}", "${zipPath}", "--title", "${title}", "--notes", "자동 릴리즈 업로드입니다."]
+            : ["gh", "release", "create", "${tag}", "${zipPath}", "--title", "${title}", "--notes", "자동 릴리즈 업로드입니다."]
+
+    commandLine ghCmd
+    environment "GITHUB_TOKEN", System.getenv("GITHUB_TOKEN")
+}
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// 5️⃣ 최종 워크플로우 Task
+// ────────────────────────────────────────────────────────────────────────────
+
+tasks.register('releaseAll') {
+    group = 'distribution'
+    description = '1) 패키징 → 2) 버전 bump → 3) CHANGELOG 갱신 → 4) GitHub 릴리즈'
+    dependsOn 'uploadRelease'
 }

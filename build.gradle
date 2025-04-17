@@ -98,7 +98,6 @@ ${commitLog}
         changelog.text = changelogEntry
         println "📝 CHANGELOG.md 갱신 완료"
 
-
         // zip 파일 존재 확인
         if (!file(zipPath).exists()) {
             throw new GradleException("❌ zip 파일이 존재하지 않습니다: ${zipPath}")
@@ -109,13 +108,14 @@ ${commitLog}
         def ghCmd
         if (isWindows) {
             def ghPath = "C:\\Program Files\\GitHub CLI\\gh.exe"
-            ghCmd = "\"${ghPath}\" release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
+            ghCmd = "\"${ghPath}\" release create \"${tag}\" \"${zipPath}\" --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
         } else {
-            ghCmd = "gh release create ${tag} ${zipPath} --title '${title}' --notes '자동 릴리즈 업로드입니다.'"
+            // 따옴표로 감싸 glob 문제 방지
+            ghCmd = "gh release create '${tag}' '${zipPath}' --title '${title}' --notes '자동 릴리즈 업로드입니다.'"
         }
 
         println "🚀 GitHub Release 업로드..."
-        def proc = ghCmd.execute()
+        def proc = ['sh', '-c', ghCmd].execute()  // ← 반드시 셸로 실행해야 따옴표 유지됨
         proc.in.eachLine { println "[STDOUT] $it" }
         proc.err.eachLine { println "[STDERR] $it" }
         def exitCode = proc.waitFor()

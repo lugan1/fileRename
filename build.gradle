@@ -115,9 +115,17 @@ ${commitLog}
         }
 
         println "🚀 GitHub Release 업로드..."
-        def proc = ['sh', '-c', ghCmd].execute()  // ← 반드시 셸로 실행해야 따옴표 유지됨
-        proc.in.eachLine { println "[STDOUT] $it" }
-        proc.err.eachLine { println "[STDERR] $it" }
+
+        def command = ['sh', '-c', ghCmd]
+        def processBuilder = new ProcessBuilder(command)
+        processBuilder.directory(project.rootDir)
+
+        // GitHub Actions에서 자동으로 주입되는 GITHUB_TOKEN 사용
+        processBuilder.environment().put("GITHUB_TOKEN", System.getenv("GITHUB_TOKEN"))
+
+        def proc = processBuilder.start()
+        proc.inputStream.eachLine { println "[STDOUT] $it" }
+        proc.errorStream.eachLine { println "[STDERR] $it" }
         def exitCode = proc.waitFor()
 
         if (exitCode != 0) {

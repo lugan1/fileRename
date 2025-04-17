@@ -10,6 +10,10 @@ jobs:
   build-release:
     runs-on: ubuntu-latest
 
+    # 🔧 [여기 추가] GitHub Release 등에 필요한 쓰기 권한
+    permissions:
+      contents: write
+
     steps:
       - name: 🔄 Checkout
         uses: actions/checkout@v3

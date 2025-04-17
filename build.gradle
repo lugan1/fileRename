@@ -32,6 +32,7 @@ kotlin {
 tasks.register('packageExe', Exec) {
     group = 'distribution'
     description = 'jpackage로 .exe 빌드'
+    dependsOn 'jar'
     def jarName = "fileRename-${project.version}.jar"
     commandLine 'jpackage',
             '--type', 'app-image',

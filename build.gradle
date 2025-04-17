@@ -98,6 +98,12 @@ ${commitLog}
         changelog.text = changelogEntry
         println "📝 CHANGELOG.md 갱신 완료"
 
+
+        // zip 파일 존재 확인
+        if (!file(zipPath).exists()) {
+            throw new GradleException("❌ zip 파일이 존재하지 않습니다: ${zipPath}")
+        }
+
         // OS 판별 후 gh 명령 경로 설정
         def isWindows = System.properties['os.name'].toLowerCase().contains('windows')
         def ghCmd

@@ -113,31 +113,45 @@ tasks.register('updateChangelog') {
 // 4️⃣ GitHub Release 업로드
 // ────────────────────────────────────────────────────────────────────────────
 
-tasks.register('uploadRelease', Exec) {
+tasks.register('uploadRelease') {
     group = 'distribution'
-    description = 'GitHub CLI를 사용해 Release를 생성·업로드합니다.'
+    description = 'GitHub 릴리즈 생성 또는 자산 업로드'
     dependsOn 'packageZipExe', 'updateChangelog'
 
-    doFirst {
-        // 1) 최신 버전 읽어서 Tag, Title, Zip 경로 계산
+    doLast {
+        // 1) 버전·태그·경로·메모 계산
         def props = new Properties()
         props.load(file("gradle.properties").newInputStream())
         def version = props.getProperty("version")
         def tag     = "v${version}"
         def zipPath = file("${project.rootDir}/build/zip/MyApp.zip").absolutePath
         def title   = "Release ${version}"
+        def notes   = "자동 릴리즈 업로드입니다."
 
-        // 2) OS별 gh 커맨드 리스트 구성
-        def isWin = System.properties['os.name'].toLowerCase().contains('windows')
-        def ghCmd = isWin
-                ? ["C:\\Program Files\\GitHub CLI\\gh.exe", "release", "create", tag, zipPath, "--title", title, "--notes", "자동 릴리즈 업로드입니다."]
-                : ["gh", "release", "create", tag, zipPath, "--title", title, "--notes", "자동 릴리즈 업로드입니다."]
+        // 2) 기존 릴리즈 존재 여부 확인
+        def view = exec {
+            commandLine 'gh', 'release', 'view', tag
+            isIgnoreExitValue = true
+            standardOutput = new ByteArrayOutputStream()
+            errorOutput    = new ByteArrayOutputStream()
+        }
+        def exists = (view.exitValue == 0)
 
-        // 3) Exec 설정 재할당
-        commandLine = ghCmd
-        environment "GITHUB_TOKEN", System.getenv("GITHUB_TOKEN")
+        println exists
+                ? "ℹ️ 릴리즈 ${tag}가 이미 존재합니다. 자산을 업로드합니다."
+                : "✨ 새로운 릴리즈 ${tag} 생성 중..."
+
+        // 3) 실제 업로드/생성
+        exec {
+            commandLine exists
+                    ? ['gh', 'release', 'upload', tag, zipPath, '--clobber']
+                    : ['gh', 'release', 'create', tag, zipPath, '--title', title, '--notes', notes]
+            environment "GITHUB_TOKEN", System.getenv("GITHUB_TOKEN")
+        }
     }
 }
+
+
 
 
 // ────────────────────────────────────────────────────────────────────────────

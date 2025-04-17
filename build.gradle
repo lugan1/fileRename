@@ -60,7 +60,7 @@ tasks.register('packageZipExe', Zip) {
 
 tasks.register('releaseAll') {
     group = 'distribution'
-    description = '자동으로 버전 증가 + 빌드 + zip 생성 + GitHub release 업로드까지 전부 자동화'
+    description = '자동으로 버전 증가 + 빌드 + zip + GitHub Release (OS 대응, 릴리즈 노트 자동 생성)'
 
     dependsOn 'build'
     dependsOn 'packageZipExe'
@@ -75,19 +75,40 @@ tasks.register('releaseAll') {
         def newVersion = "${parts[0]}.${parts[1]}.${parts[2] + 1}"
 
         println "📦 버전 증가: ${oldVersion} → ${newVersion}"
-
-        // 버전 업데이트
         props.setProperty("version", newVersion)
         props.store(propsFile.newWriter(), null)
 
         def tag = "v${newVersion}"
         def zipPath = "build/zip/MyApp.zip"
         def title = "Release ${newVersion}"
+        def date = new Date().format("yyyy-MM-dd")
 
-        // GitHub 릴리즈 업로드
+        // 🔁 이전 태그 기준 커밋 로그 추출
+        def previousTag = "v${parts[0]}.${parts[1]}.${parts[2]}"
+        def logCmd = ["git", "log", "${previousTag}..HEAD", "--pretty=format:- %s"]
+        def commitLog = logCmd.execute().text.trim()
+
+        // 📝 CHANGELOG.md 앞에 추가
+        def changelog = file("CHANGELOG.md")
+        def changelogEntry = """
+## ${tag} - ${date}
+${commitLog}
+
+""" + (changelog.exists() ? changelog.text : "")
+        changelog.text = changelogEntry
+        println "📝 CHANGELOG.md 갱신 완료"
+
+        // OS 판별 후 gh 명령 경로 설정
+        def isWindows = System.properties['os.name'].toLowerCase().contains('windows')
+        def ghCmd
+        if (isWindows) {
+            def ghPath = "C:\\Program Files\\GitHub CLI\\gh.exe"
+            ghCmd = "\"${ghPath}\" release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
+        } else {
+            ghCmd = "gh release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
+        }
+
         println "🚀 GitHub Release 업로드..."
-        def ghPath = "C:\\Program Files\\GitHub CLI\\gh.exe"
-        def ghCmd = "\"${ghPath}\" release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
         def proc = ghCmd.execute()
         proc.in.eachLine { println "[STDOUT] $it" }
         proc.err.eachLine { println "[STDERR] $it" }

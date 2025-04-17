@@ -131,7 +131,7 @@ tasks.register('uploadRelease') {
         // 2) 기존 릴리즈 존재 여부 확인
         def view = exec {
             commandLine 'gh', 'release', 'view', tag
-            isIgnoreExitValue = true
+            ignoreExitValue = true
             standardOutput = new ByteArrayOutputStream()
             errorOutput    = new ByteArrayOutputStream()
         }

@@ -105,7 +105,7 @@ ${commitLog}
             def ghPath = "C:\\Program Files\\GitHub CLI\\gh.exe"
             ghCmd = "\"${ghPath}\" release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
         } else {
-            ghCmd = "gh release create ${tag} ${zipPath} --title \"${title}\" --notes \"자동 릴리즈 업로드입니다.\""
+            ghCmd = "gh release create ${tag} ${zipPath} --title '${title}' --notes '자동 릴리즈 업로드입니다.'"
         }
 
         println "🚀 GitHub Release 업로드..."

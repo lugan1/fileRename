@@ -91,10 +91,9 @@ tasks.register('releaseAll') {
         // 📝 CHANGELOG.md 앞에 추가
         def changelog = file("CHANGELOG.md")
         def changelogEntry = """
-## ${tag} - ${date}
-${commitLog}
-
-""" + (changelog.exists() ? changelog.text : "")
+            ## ${tag} - ${date}
+            ${commitLog}
+        """ + (changelog.exists() ? changelog.text : "")
         changelog.text = changelogEntry
         println "📝 CHANGELOG.md 갱신 완료"
 
@@ -116,11 +115,11 @@ ${commitLog}
 
         println "🚀 GitHub Release 업로드..."
 
-        def command = ['sh', '-c', ghCmd]
+        def command = ['sh', '-c', ghCmd] as String[]  // ← 여기 중요!!
         def processBuilder = new ProcessBuilder(command)
         processBuilder.directory(project.rootDir)
 
-        // GitHub Actions에서 자동으로 주입되는 GITHUB_TOKEN 사용
+        // GitHub Actions용 GITHUB_TOKEN 전달
         processBuilder.environment().put("GITHUB_TOKEN", System.getenv("GITHUB_TOKEN"))
 
         def proc = processBuilder.start()

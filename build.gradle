@@ -114,27 +114,28 @@ tasks.register('updateChangelog') {
 
 tasks.register('uploadRelease', Exec) {
     group = 'distribution'
-    description = 'GitHub CLI(gh)를 사용해 Release를 생성/업로드합니다.'
+    description = 'GitHub CLI를 사용해 Release를 생성·업로드합니다.'
     dependsOn 'packageZipExe', 'updateChangelog'
 
     doFirst {
-        // release 관련 변수 재계산
+        // 1) 최신 버전 읽어서 Tag, Title, Zip 경로 계산
         def props = new Properties()
         props.load(file("gradle.properties").newInputStream())
-        ext.newVersion = props.getProperty("version")
-        ext.tag = "v${newVersion}"
-        ext.zipPath = "${project.rootDir}/build/zip/MyApp.zip"
-        ext.title = "Release ${newVersion}"
+        def version = props.getProperty("version")
+        def tag     = "v${version}"
+        def zipPath = file("${project.rootDir}/build/zip/MyApp.zip").absolutePath
+        def title   = "Release ${version}"
+
+        // 2) OS별 gh 커맨드 리스트 구성
+        def isWin = System.properties['os.name'].toLowerCase().contains('windows')
+        def ghCmd = isWin
+                ? ["C:\\Program Files\\GitHub CLI\\gh.exe", "release", "create", tag, zipPath, "--title", title, "--notes", "자동 릴리즈 업로드입니다."]
+                : ["gh", "release", "create", tag, zipPath, "--title", title, "--notes", "자동 릴리즈 업로드입니다."]
+
+        // 3) Exec 설정 재할당
+        commandLine = ghCmd
+        environment "GITHUB_TOKEN", System.getenv("GITHUB_TOKEN")
     }
-
-    // OS별 gh 커맨드 구성
-    def isWindows = System.properties['os.name'].toLowerCase().contains('windows')
-    def ghCmd = isWindows
-            ? ["C:\\Program Files\\GitHub CLI\\gh.exe", "release", "create", "${tag}", "${zipPath}", "--title", "${title}", "--notes", "자동 릴리즈 업로드입니다."]
-            : ["gh", "release", "create", "${tag}", "${zipPath}", "--title", "${title}", "--notes", "자동 릴리즈 업로드입니다."]
-
-    commandLine ghCmd
-    environment "GITHUB_TOKEN", System.getenv("GITHUB_TOKEN")
 }
 
 

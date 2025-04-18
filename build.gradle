@@ -1,3 +1,5 @@
+// https://plugins.gradle.org/ 에서 플러그인 id를 검색하고 자동 다운받는다.
+// .gradle/ 에 캐시하고 다음부터는 여기서 로드한다.
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm'
@@ -20,38 +22,84 @@ test {
     useJUnitPlatform()
 }
 
+//id 'org.jetbrains.kotlin.jvm' 플러그인이 필요함. jvmToolchain 은 코틀린을 컴파일할 jdk 버전을 지정한다.
 kotlin {
     jvmToolchain(19)
 }
+
+
+
+//스크립트 명령어 실행방법
+//(1). ['git', 'status'].execute()
+//Groovy의 기본 기능이야.
+//execute()는 Java의 Runtime.exec(...)를 감싼 기능이야.
+//리턴값은 java.lang.Process
+//출력 결과를 result.text 또는 result.in.text 등으로 얻음.
+//예외 발생 시 직접 try-catch 해야 함.
+//Gradle Task의 빌드 캐시, 출력 제어 등과는 무관.
+
+
+//(2). exec{ commandLine 'git', 'status' }
+//Gradle Task 내부에선 exec {}가 더 자연스러움
+//Gradle의 Project.exec {} 또는 Task 내부의 exec {} 구문에서 사용.
+//리턴값은 ExecResult
+//ignoreExitValue, standardOutput, environment, workingDir 등의 제어가 더 풍부.
+//빌드 태스크로 인식되며, Gradle의 의존성 그래프 및 캐시와 통합됨.
+//에러 시 자동으로 예외를 던짐 (옵션으로 무시 가능)
 
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1️⃣ .exe 생성 & .zip 패키징 (unchanged)
 // ────────────────────────────────────────────────────────────────────────────
 
+// 새로운 Task를 등록: 이름은 'packageExe', 타입은 Exec (외부 명령 실행용)
+// Exec 타입은 task 실행시 commandLine 명령어가 바로 실행된다. 반대로 exec { } 은 해당 라인에 도달해야 명령어 실행
 tasks.register('packageExe', Exec) {
+
+    // Gradle Task 그룹 이름 지정 (예: gradlew tasks 로 볼 때 'distribution' 아래에 표시됨)
     group = 'distribution'
+
+    // Task에 대한 설명 (gradlew tasks 시 출력됨)
     description = 'jpackage로 .exe 빌드'
+
+    // 이 Task를 실행하기 전에 반드시 'jar' Task가 먼저 실행되도록 설정
     dependsOn 'jar'
+
+    // 빌드된 JAR 파일 이름을 동적으로 생성 (예: fileRename-1.0.0.jar)
     def jarName = "fileRename-${project.version}.jar"
+
+    // jpackage 명령어 실행: 아래 인자들을 순서대로 전달
     commandLine 'jpackage',
-            '--type', 'app-image',
-            '--input', 'build/libs',
-            '--name', 'MyApp',
-            '--main-jar', jarName,
-            '--main-class', 'org.example.Main',
-            '--dest', 'build/exe'
+            '--type', 'app-image',           // 앱 이미지를 생성 (실행 가능한 디렉토리 구조)
+            '--input', 'build/libs',         // jar 파일이 위치한 디렉토리 지정
+            '--name', 'MyApp',               // 생성될 애플리케이션 이름 (예: MyApp.exe)
+            '--main-jar', jarName,           // 실행할 메인 JAR 파일 지정
+            '--main-class', 'org.example.Main', // 애플리케이션 진입점 클래스 지정
+            '--dest', 'build/exe'            // 생성 결과물을 저장할 출력 디렉토리
 }
 
+
+// 'packageZipExe'라는 이름의 Zip 타입 Task 등록 (압축 파일 생성용)
 tasks.register('packageZipExe', Zip) {
+
+    // Gradle에서 이 Task가 속할 그룹을 지정 ('gradlew tasks' 명령어 시 분류용)
     group = 'distribution'
+
+    // Task 설명: 이 Task가 무엇을 하는지 설명 (문서화 및 가독성 목적)
     description = '압축된 exe 배포파일(.zip)을 생성합니다.'
+
+    // 이 Task를 실행하기 전에 반드시 'packageExe' Task가 먼저 실행되어야 함
     dependsOn 'packageExe'
+
+    // 압축할 대상 디렉토리 지정: packageExe 결과물이 있는 폴더
     from file("build/exe/MyApp")
+
+    // 생성된 zip 파일이 저장될 디렉토리 지정
     destinationDirectory.set(file("build/zip"))
+
+    // 생성될 zip 파일 이름 설정
     archiveFileName.set("MyApp.zip")
 }
-
 
 // ────────────────────────────────────────────────────────────────────────────
 // 2️⃣ 버전 증가
@@ -116,10 +164,19 @@ tasks.register('updateChangelog') {
 tasks.register('uploadRelease') {
     group = 'distribution'
     description = 'GitHub 릴리즈 생성 또는 자산 업로드'
+    //dependsOn: 이 Task 실행 전에 반드시 완료되어야 하는 Task를 지정. 의존 관계 설정.
     dependsOn 'packageZipExe', 'updateChangelog'
 
     // ❶ 현재 Git 브랜치 이름 가져오기
+    // def: Groovy의 지역 변수 선언 키워드. 타입을 명시하지 않아도 됨.
     def currentBranch = 'unknown'
+
+    /*
+    ['git', ...].execute(): 커맨드 라인을 실행하는 Groovy의 기능. git 명령어를 실행함.
+    .text: 명령 결과를 문자열로 가져옴.
+    .trim(): 양쪽 공백 제거.
+    try-catch: 실패할 경우 무시하고 넘어감 (에러 안전 처리).
+    * */
     try {
         currentBranch = ['git', 'rev-parse', '--abbrev-ref', 'HEAD']
                 .execute()
@@ -133,13 +190,19 @@ tasks.register('uploadRelease') {
     enabled = (currentBranch == 'main' || currentBranch.startsWith('release/'))
 
     // (선택) 로그 한 줄 추가해서 로컬 테스트할 때 확인하기
+    // doFirst {}: Task 실행 전에 수행될 블록. 초기 로그 또는 조건 확인에 사용.
     doFirst {
         println "▶ uploadRelease enabled? ${enabled} (currentBranch=${currentBranch})"
     }
 
+    //doLast {}: Task 실행 후 실제 로직이 수행되는 메인 블록.
     doLast {
         // 1) 버전·태그·경로·메모 계산
+
+        //new Properties(): 자바의 Properties 객체. 키-값 쌍을 담는 설정 파일 로딩에 사용.
         def props = new Properties()
+
+        //.load(): InputStream에서 .properties 파일의 키-값 데이터를 불러옴.
         props.load(file("gradle.properties").newInputStream())
         def version = props.getProperty("version")
         def tag     = "v${version}"
@@ -148,9 +211,19 @@ tasks.register('uploadRelease') {
         def notes   = "자동 릴리즈 업로드입니다."
 
         // 2) 기존 릴리즈 존재 여부 확인
+
+
+        //exec {}: 외부 명령어를 실행하는 Gradle 내장 함수. OS 셸 명령을 실행할 때 사용.
+        //exec {} 은 ExecResult 타입을 리턴한다.
+        // .exitValue()	프로세스의 종료 코드. 일반적으로 0이면 성공.
+        // .assertNormalExitValue()	exit code가 0이 아니면 예외를 던짐.
+        // .rethrowFailure()	실행 중 발생한 에러를 다시 throw. (주로 커스텀 처리할 때 사용)
         def view = exec {
+            //commandLine: 실행할 명령어와 인자. 여기서는 GitHub CLI 사용.
             commandLine 'gh', 'release', 'view', tag
+            //ignoreExitValue = true: 명령어 실패(비정상 종료) 시에도 에러를 던지지 않음.
             ignoreExitValue = true
+            //standardOutput, errorOutput: 명령어 결과를 메모리로 저장.
             standardOutput = new ByteArrayOutputStream()
             errorOutput    = new ByteArrayOutputStream()
         }
@@ -165,6 +238,9 @@ tasks.register('uploadRelease') {
             commandLine exists
                     ? ['gh', 'release', 'upload', tag, zipPath, '--clobber']
                     : ['gh', 'release', 'create', tag, zipPath, '--title', title, '--notes', notes]
+
+            //environment(...): 실행 환경 변수 지정. 여기서는 GITHUB_TOKEN을 환경에 주입하여 인증 처리.
+            //System.getenv(...): 시스템 환경변수에서 값을 읽음.
             environment "GITHUB_TOKEN", System.getenv("GITHUB_TOKEN")
         }
     }

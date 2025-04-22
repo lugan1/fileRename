@@ -2,11 +2,11 @@ name: Daily Commit
 
 on:
   schedule:
-    - cron: '0 15 * * *' # 한국 자정 (UTC 기준 15시)
+    - cron: '0 15 * * *'  # 한국 자정 (UTC 15시)
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write  # 이건 checkout 등 기본 권한을 위해 명시함
 
 jobs:
   commit:
@@ -21,9 +21,15 @@ jobs:
           git config --global user.name "이후기"
           git config --global user.email "lugan@naver.com"
 
-      - name: Create a dummy commit
+      - name: Create or update dummy file
         run: |
-          date > auto_commit.txt
+          echo "$(date)" > auto_commit.txt
           git add auto_commit.txt
-          git commit -m "🌱 Daily commit: $(date)"
+          git commit -m "🌱 Daily commit: $(date)" || echo "Nothing to commit"
+
+      - name: Push using Personal Access Token
+        env:
+          TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+        run: |
+          git remote set-url origin https://x-access-token:${TOKEN}@github.com/${{ github.repository }}
           git push origin main
